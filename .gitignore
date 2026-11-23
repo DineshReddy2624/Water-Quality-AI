@@ -34,7 +34,11 @@ backend/uploads/*
 !backend/uploads/.gitkeep
 backend/generated_reports/*
 !backend/generated_reports/.gitkeep
+backend/data/reports/*
+!backend/data/reports/.gitkeep
 backend/trained_models/*.joblib
+*.pdf
+*.xlsx
 
 # IDE & OS
 .vscode/

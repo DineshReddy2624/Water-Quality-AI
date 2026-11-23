@@ -25,11 +25,11 @@ export const WaterQualityMap: React.FC<WaterQualityMapProps> = ({
     if (!mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
-      // Default to center near SF Bay / default monitoring coordinate
-      const defaultCenter: [number, number] = [37.76, -122.42];
+      // Default to center on India
+      const defaultCenter: [number, number] = [20.5937, 78.9629];
       const map = L.map(mapContainerRef.current, {
         center: defaultCenter,
-        zoom: 12,
+        zoom: 5,
         scrollWheelZoom: true,
       });
 

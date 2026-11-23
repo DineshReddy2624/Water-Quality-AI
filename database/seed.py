@@ -70,16 +70,16 @@ def seed_database():
         db.commit()
         db.refresh(admin_user)
 
-        # 4. Seed Monitoring Locations
-        print("[3/4] Seeding water source monitoring locations...")
+        # 4. Seed Monitoring Locations (Indian Coordinates)
+        print("[3/4] Seeding water source monitoring locations in India...")
         sources_data = [
-            {"name": "Sample Lake A", "location_name": "Sample Lake A", "lat": 37.7749, "lon": -122.4194, "type": "lake", "desc": "Municipal recreational and ecological reservoir."},
-            {"name": "Industrial Zone Canal", "location_name": "Industrial Zone", "lat": 37.7833, "lon": -122.4167, "type": "industrial", "desc": "Drainage canal buffering regional light manufacturing district."},
-            {"name": "River Source B Basin", "location_name": "River Source B", "lat": 37.7650, "lon": -122.4300, "type": "river", "desc": "Highland river tributary providing seasonal surface runoff."},
-            {"name": "Groundwater Aquifer 4", "location_name": "Groundwater Zone", "lat": 37.7900, "lon": -122.4000, "type": "groundwater", "desc": "Deep bedrock aquifer well cluster."},
-            {"name": "Reservoir C Intake", "location_name": "Reservoir C", "lat": 37.7500, "lon": -122.4500, "type": "reservoir", "desc": "Protected drinking water catchment reservoir."},
-            {"name": "Industrial Discharge Outfall", "location_name": "Industrial Discharge Area", "lat": 37.7400, "lon": -122.3900, "type": "industrial", "desc": "Permitted industrial discharge testing outfall."},
-            {"name": "Agricultural Runoff Ditch", "location_name": "Agricultural District", "lat": 37.7300, "lon": -122.4600, "type": "other", "desc": "Irrigation return flow drainage canal."}
+            {"name": "Sample Lake A", "location_name": "Sample Lake A", "lat": 12.9784, "lon": 77.6200, "type": "lake", "desc": "Municipal recreational and ecological reservoir in Karnataka."},
+            {"name": "Industrial Zone Canal", "location_name": "Industrial Zone", "lat": 13.0310, "lon": 77.5180, "type": "industrial", "desc": "Drainage canal buffering regional light manufacturing district."},
+            {"name": "River Source B Basin", "location_name": "River Source B", "lat": 12.5180, "lon": 77.4420, "type": "river", "desc": "Highland river tributary providing seasonal surface runoff."},
+            {"name": "Groundwater Aquifer 4", "location_name": "Groundwater Zone", "lat": 12.9250, "lon": 77.5930, "type": "groundwater", "desc": "Deep bedrock aquifer well cluster."},
+            {"name": "Reservoir C Intake", "location_name": "Reservoir C", "lat": 12.8720, "lon": 77.3390, "type": "reservoir", "desc": "Protected drinking water catchment reservoir."},
+            {"name": "Industrial Discharge Outfall", "location_name": "Industrial Discharge Area", "lat": 12.9100, "lon": 77.4950, "type": "industrial", "desc": "Permitted industrial discharge testing outfall."},
+            {"name": "Agricultural Runoff Ditch", "location_name": "Agricultural District", "lat": 12.7230, "lon": 77.2910, "type": "other", "desc": "Irrigation return flow drainage canal."}
         ]
 
         location_map = {}

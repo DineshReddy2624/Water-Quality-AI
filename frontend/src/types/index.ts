@@ -105,6 +105,7 @@ export interface WaterSample {
   location_name: string;
   latitude?: number;
   longitude?: number;
+  timezone?: string;
   collection_date: string;
   notes?: string;
   parameters?: WaterParameter;

@@ -1,6 +1,6 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, and_
+from sqlalchemy.orm import relationship, foreign
 from app.database.base import Base
 
 class WaterSample(Base):
@@ -13,6 +13,7 @@ class WaterSample(Base):
     location_name = Column(String(255), index=True, nullable=False)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    timezone = Column(String(50), default="Asia/Kolkata", nullable=False)
     collection_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     notes = Column(Text, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -22,7 +23,22 @@ class WaterSample(Base):
     water_source = relationship("WaterSource", back_populates="samples")
     creator = relationship("User", back_populates="samples")
     parameters = relationship("WaterParameter", back_populates="sample", uselist=False, cascade="all, delete-orphan")
-    analysis = relationship("AnalysisResult", back_populates="sample", uselist=False, cascade="all, delete-orphan")
+    
+    # Active current analysis
+    analysis = relationship(
+        "AnalysisResult",
+        primaryjoin="and_(WaterSample.id==foreign(AnalysisResult.sample_id), foreign(AnalysisResult.is_current)==True)",
+        uselist=False,
+        viewonly=True
+    )
+    # Full historical analyses list
+    analyses = relationship(
+        "AnalysisResult",
+        back_populates="sample",
+        cascade="all, delete-orphan",
+        order_by="desc(AnalysisResult.created_at)"
+    )
+
     anomalies = relationship("AnomalyRecord", back_populates="sample", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="sample", cascade="all, delete-orphan")
     recommendations = relationship("Recommendation", back_populates="sample", cascade="all, delete-orphan")

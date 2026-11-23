@@ -47,8 +47,20 @@ export const sampleService = {
     const res = await api.put(`/samples/${idOrCode}`, data);
     return res.data;
   },
+  getNextId: async (): Promise<{ next_sample_id: string }> => {
+    const res = await api.get('/samples/next-id');
+    return res.data;
+  },
+  checkId: async (sampleId: string): Promise<{ sample_id: string; is_available: boolean; message: string }> => {
+    const res = await api.get(`/samples/check-id/${encodeURIComponent(sampleId)}`);
+    return res.data;
+  },
   delete: async (idOrCode: string | number) => {
     const res = await api.delete(`/samples/${idOrCode}`);
+    return res.data;
+  },
+  bulkDelete: async (sampleIds: (string | number)[]): Promise<{ deleted_count: number; message: string }> => {
+    const res = await api.post('/samples/bulk-delete', { sample_ids: sampleIds });
     return res.data;
   }
 };
@@ -87,6 +99,14 @@ export const analysisService = {
   },
   getResult: async (sampleId: string | number) => {
     const res = await api.get(`/analysis/${sampleId}/result`);
+    return res.data;
+  },
+  getHistory: async (sampleId: string | number) => {
+    const res = await api.get(`/analysis/${sampleId}/history`);
+    return res.data;
+  },
+  getParameterConfigs: async () => {
+    const res = await api.get('/analysis/parameters/config');
     return res.data;
   }
 };
@@ -138,7 +158,10 @@ export const reportService = {
     return res.data;
   },
   getDownloadUrl: (reportId: string | number) => `/api/reports/${reportId}/download`,
-  getSamplePdfUrl: (sampleId: number) => `/api/reports/sample/${sampleId}/pdf`,
+  getSamplePdfUrl: (sampleId: number, analysisId?: number | null) =>
+    analysisId ? `/api/reports/sample/${sampleId}/pdf?analysis_id=${analysisId}` : `/api/reports/sample/${sampleId}/pdf`,
+  getSampleExcelUrl: (sampleId: number, analysisId?: number | null) =>
+    analysisId ? `/api/reports/sample/${sampleId}/excel?analysis_id=${analysisId}` : `/api/reports/sample/${sampleId}/excel`,
   getDatasetExcelUrl: () => `/api/reports/export/excel`
 };
 

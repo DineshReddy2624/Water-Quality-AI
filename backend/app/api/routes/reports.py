@@ -11,10 +11,11 @@ from app.core.config import settings
 from app.core.dependencies import get_db, get_optional_user, get_current_user
 from app.models.user import User
 from app.models.water_sample import WaterSample
+from app.models.analysis_result import AnalysisResult
 from app.models.report import Report
 from app.schemas.report import ReportGenerateRequest, ReportResponse
 from app.reports.pdf_generator import generate_sample_pdf_report
-from app.reports.excel_generator import generate_samples_excel_report
+from app.reports.excel_generator import generate_samples_excel_report, generate_single_sample_excel_report
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -34,10 +35,40 @@ def generate_report(
         if not sample:
             raise HTTPException(status_code=404, detail="Water sample not found")
 
+        analysis = None
+        if req.analysis_id:
+            analysis = db.query(AnalysisResult).filter(AnalysisResult.id == req.analysis_id, AnalysisResult.sample_id == sample.id).first()
+        if not analysis:
+            analysis = sample.analysis
+
+        if not analysis:
+            raise HTTPException(status_code=400, detail="No valid analysis run found for this sample.")
+
         file_name = f"water_sample_{sample.sample_id}_{timestamp_str}.pdf"
         file_path = os.path.join(settings.REPORT_DIR, file_name)
-        generate_sample_pdf_report(sample, sample.analysis, sample.anomalies, file_path)
+        generate_sample_pdf_report(sample, analysis, sample.anomalies, file_path)
         title = req.title or f"Water Quality Analysis Report - Sample {sample.sample_id}"
+
+    elif req.report_type in ["sample_excel", "single_sample_excel"]:
+        if not req.sample_id:
+            raise HTTPException(status_code=400, detail="sample_id required for single case excel report")
+        sample = db.query(WaterSample).filter(WaterSample.id == req.sample_id).first()
+        if not sample:
+            raise HTTPException(status_code=404, detail="Water sample not found")
+
+        analysis = None
+        if req.analysis_id:
+            analysis = db.query(AnalysisResult).filter(AnalysisResult.id == req.analysis_id, AnalysisResult.sample_id == sample.id).first()
+        if not analysis:
+            analysis = sample.analysis
+
+        if not analysis:
+            raise HTTPException(status_code=400, detail="No valid analysis run found for this sample.")
+
+        file_name = f"water_sample_{sample.sample_id}_{timestamp_str}.xlsx"
+        file_path = os.path.join(settings.REPORT_DIR, file_name)
+        generate_single_sample_excel_report(sample, analysis, file_path)
+        title = req.title or f"Case Analytical Excel Report - Sample {sample.sample_id}"
 
     elif req.report_type in ["samples_excel", "dataset_excel"]:
         samples = db.query(WaterSample).all()
@@ -123,20 +154,67 @@ def download_report(report_id_or_code: str, db: Session = Depends(get_db)):
     )
 
 @router.get("/sample/{sample_id}/pdf")
-def direct_sample_pdf(sample_id: int, db: Session = Depends(get_db)):
+def direct_sample_pdf(
+    sample_id: int,
+    analysis_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
     sample = db.query(WaterSample).filter(WaterSample.id == sample_id).first()
     if not sample:
         raise HTTPException(status_code=404, detail="Sample not found")
 
+    analysis = None
+    if analysis_id:
+        analysis = db.query(AnalysisResult).filter(AnalysisResult.id == analysis_id, AnalysisResult.sample_id == sample.id).first()
+        if not analysis:
+            raise HTTPException(status_code=404, detail="Selected analysis run not found for this sample")
+    else:
+        analysis = sample.analysis
+
+    if not analysis:
+        raise HTTPException(status_code=400, detail="No valid analysis run available for this sample")
+
     timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    file_name = f"water_sample_{sample.sample_id}_{timestamp_str}.pdf"
+    file_name = f"water_sample_{sample.sample_id}_run{analysis.id}_{timestamp_str}.pdf"
     file_path = os.path.join(settings.REPORT_DIR, file_name)
-    generate_sample_pdf_report(sample, sample.analysis, sample.anomalies, file_path)
+    generate_sample_pdf_report(sample, analysis, sample.anomalies, file_path)
 
     return FileResponse(
         path=file_path,
         filename=file_name,
         media_type="application/pdf"
+    )
+
+@router.get("/sample/{sample_id}/excel")
+def direct_sample_excel(
+    sample_id: int,
+    analysis_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    sample = db.query(WaterSample).filter(WaterSample.id == sample_id).first()
+    if not sample:
+        raise HTTPException(status_code=404, detail="Sample not found")
+
+    analysis = None
+    if analysis_id:
+        analysis = db.query(AnalysisResult).filter(AnalysisResult.id == analysis_id, AnalysisResult.sample_id == sample.id).first()
+        if not analysis:
+            raise HTTPException(status_code=404, detail="Selected analysis run not found for this sample")
+    else:
+        analysis = sample.analysis
+
+    if not analysis:
+        raise HTTPException(status_code=400, detail="No valid analysis run available for this sample")
+
+    timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    file_name = f"water_sample_{sample.sample_id}_run{analysis.id}_{timestamp_str}.xlsx"
+    file_path = os.path.join(settings.REPORT_DIR, file_name)
+    generate_single_sample_excel_report(sample, analysis, file_path)
+
+    return FileResponse(
+        path=file_path,
+        filename=file_name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 @router.get("/export/excel")

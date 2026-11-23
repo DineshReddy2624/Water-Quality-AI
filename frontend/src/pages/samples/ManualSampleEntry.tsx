@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sampleService } from '../../services';
 import {
   Save, Sparkles, RotateCcw, AlertCircle, CheckCircle2,
-  TestTube, ShieldCheck, HelpCircle
+  TestTube, ShieldCheck, HelpCircle, RefreshCw, AlertTriangle
 } from 'lucide-react';
 
-// The 6 exact manual testing scenarios from user prompt Section 6
+// The 6 exact manual testing scenarios calibrated with India geospatial coordinates
 const TEST_SCENARIOS = [
   {
     id: 'WQ001',
@@ -14,8 +14,8 @@ const TEST_SCENARIOS = [
     desc: 'Demonstrate normal baseline measurements.',
     source: 'Sample Lake A',
     location: 'Sample Lake A',
-    lat: 37.7749,
-    lon: -122.4194,
+    lat: 12.9784,
+    lon: 77.6200,
     data: { ph: 7.2, turbidity: 1.5, temperature: 25.0, dissolved_oxygen: 7.8, tds: 280.0, electrical_conductivity: 450.0, hardness: 120.0, chloramines: 2.1, sulfate: 180.0, organic_carbon: 3.2 }
   },
   {
@@ -24,8 +24,8 @@ const TEST_SCENARIOS = [
     desc: 'Demonstrate acidic pH and elevated solids requiring attention.',
     source: 'Industrial Zone Canal',
     location: 'Industrial Zone',
-    lat: 37.7833,
-    lon: -122.4167,
+    lat: 13.0310,
+    lon: 77.5180,
     data: { ph: 5.2, turbidity: 8.5, temperature: 28.0, dissolved_oxygen: 4.0, tds: 650.0, electrical_conductivity: 950.0, hardness: 210.0, chloramines: 3.8, sulfate: 320.0, organic_carbon: 7.5 }
   },
   {
@@ -34,8 +34,8 @@ const TEST_SCENARIOS = [
     desc: 'Demonstrate elevated turbidity detection (15.0 NTU).',
     source: 'River Source B Basin',
     location: 'River Source B',
-    lat: 37.7650,
-    lon: -122.4300,
+    lat: 12.5180,
+    lon: 77.4420,
     data: { ph: 7.1, turbidity: 15.0, temperature: 27.0, dissolved_oxygen: 6.2, tds: 420.0, electrical_conductivity: 600.0, hardness: 140.0, chloramines: 2.4, sulfate: 195.0, organic_carbon: 5.1 }
   },
   {
@@ -44,8 +44,8 @@ const TEST_SCENARIOS = [
     desc: 'Demonstrate elevated dissolved solids (1200 mg/L) & EC (1800 µS/cm).',
     source: 'Groundwater Aquifer 4',
     location: 'Groundwater Zone',
-    lat: 37.7900,
-    lon: -122.4000,
+    lat: 12.9250,
+    lon: 77.5930,
     data: { ph: 7.5, turbidity: 2.0, temperature: 26.0, dissolved_oxygen: 6.8, tds: 1200.0, electrical_conductivity: 1800.0, hardness: 380.0, chloramines: 1.9, sulfate: 450.0, organic_carbon: 4.0 }
   },
   {
@@ -54,8 +54,8 @@ const TEST_SCENARIOS = [
     desc: 'Demonstrate low dissolved oxygen detection (2.5 mg/L).',
     source: 'Reservoir C Intake',
     location: 'Reservoir C',
-    lat: 37.7500,
-    lon: -122.4500,
+    lat: 12.8720,
+    lon: 77.3390,
     data: { ph: 7.0, turbidity: 3.0, temperature: 30.0, dissolved_oxygen: 2.5, tds: 350.0, electrical_conductivity: 500.0, hardness: 130.0, chloramines: 1.5, sulfate: 160.0, organic_carbon: 6.8 }
   },
   {
@@ -64,21 +64,74 @@ const TEST_SCENARIOS = [
     desc: 'Demonstrate multiple critical abnormal readings and high-priority alert.',
     source: 'Industrial Discharge Outfall',
     location: 'Industrial Discharge Area',
-    lat: 37.7400,
-    lon: -122.3900,
+    lat: 12.9100,
+    lon: 77.4950,
     data: { ph: 4.5, turbidity: 20.0, temperature: 35.0, dissolved_oxygen: 2.0, tds: 1500.0, electrical_conductivity: 2200.0, hardness: 490.0, chloramines: 5.2, sulfate: 600.0, organic_carbon: 14.5 }
   }
 ];
 
 export const ManualSampleEntry: React.FC = () => {
   const navigate = useNavigate();
+  const getInitialLocalDateTime = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offset).toISOString().slice(0, 16);
+  };
+
   const [sampleId, setSampleId] = useState('');
+  const [nextSuggestedId, setNextSuggestedId] = useState('');
+  const [loadingNextId, setLoadingNextId] = useState(false);
   const [waterSource, setWaterSource] = useState('Sample Lake A');
   const [locationName, setLocationName] = useState('Sample Lake A');
-  const [latitude, setLatitude] = useState('37.7749');
-  const [longitude, setLongitude] = useState('-122.4194');
-  const [collectionDate, setCollectionDate] = useState(new Date().toISOString().slice(0, 16));
+  const [latitude, setLatitude] = useState('12.9784');
+  const [longitude, setLongitude] = useState('77.6200');
+  const [timezone, setTimezone] = useState('Asia/Kolkata');
+  const [collectionDate, setCollectionDate] = useState(getInitialLocalDateTime());
   const [notes, setNotes] = useState('');
+
+  // Fetch next available sample ID from backend
+  const refreshNextId = async () => {
+    setLoadingNextId(true);
+    try {
+      const res = await sampleService.getNextId();
+      if (res?.next_sample_id) {
+        setNextSuggestedId(res.next_sample_id);
+        return res.next_sample_id;
+      }
+    } catch {
+      // Backend auto-generates if empty
+    } finally {
+      setLoadingNextId(false);
+    }
+    return '';
+  };
+
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    refreshNextId();
+  }, []);
+
+  // Debounced duplicate ID checking
+  useEffect(() => {
+    if (!sampleId.trim()) {
+      setDuplicateWarning(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await sampleService.checkId(sampleId.trim());
+        if (!res.is_available) {
+          setDuplicateWarning(`Sample ID '${res.sample_id}' is already registered in the database. Please provide a unique ID or leave empty to auto-generate.`);
+        } else {
+          setDuplicateWarning(null);
+        }
+      } catch {
+        setDuplicateWarning(null);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [sampleId]);
 
   // Core parameters
   const [ph, setPh] = useState<number | string>(7.2);
@@ -96,9 +149,13 @@ export const ManualSampleEntry: React.FC = () => {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scenarioNotification, setScenarioNotification] = useState<string | null>(null);
 
-  const handleScenarioLoad = (scenario: typeof TEST_SCENARIOS[0]) => {
-    setSampleId(scenario.id);
+  const handleScenarioLoad = async (scenario: typeof TEST_SCENARIOS[0]) => {
+    // Immediately clear error and duplicate warning
+    setError(null);
+    setDuplicateWarning(null);
+
     setWaterSource(scenario.source);
     setLocationName(scenario.location);
     setLatitude(scenario.lat.toString());
@@ -114,7 +171,24 @@ export const ManualSampleEntry: React.FC = () => {
     setSulfate(scenario.data.sulfate);
     setOrganicCarbon(scenario.data.organic_carbon);
     setNotes(`Test Run for ${scenario.name}`);
-    setError(null);
+
+    // Dynamically assign a fresh, unique sample ID instead of duplicate scenario ID
+    try {
+      const res = await sampleService.getNextId();
+      if (res?.next_sample_id) {
+        setSampleId(res.next_sample_id);
+        setNextSuggestedId(res.next_sample_id);
+        setScenarioNotification(`Loaded ${scenario.name.split(':')[1]?.trim() || scenario.name} → Generated new unique Sample ID: ${res.next_sample_id}`);
+      } else {
+        const fallback = nextSuggestedId || `WQ${String(Date.now()).slice(-3)}`;
+        setSampleId(fallback);
+        setScenarioNotification(`Loaded ${scenario.name.split(':')[1]?.trim() || scenario.name} → Assigned Sample ID: ${fallback}`);
+      }
+    } catch {
+      const fallback = nextSuggestedId || `WQ${String(Date.now()).slice(-3)}`;
+      setSampleId(fallback);
+      setScenarioNotification(`Loaded ${scenario.name.split(':')[1]?.trim() || scenario.name} → Assigned Sample ID: ${fallback}`);
+    }
   };
 
   const handleClear = () => {
@@ -167,6 +241,27 @@ export const ManualSampleEntry: React.FC = () => {
       return;
     }
 
+    // India Geographical Bounding Box Validation
+    if (latitude) {
+      const latNum = parseFloat(latitude);
+      if (isNaN(latNum) || latNum < 8.0 || latNum > 37.0) {
+        setError('Latitude must be within India territorial bounds (8.0° N to 37.0° N).');
+        return;
+      }
+    }
+    if (longitude) {
+      const lonNum = parseFloat(longitude);
+      if (isNaN(lonNum) || lonNum < 68.0 || lonNum > 97.0) {
+        setError('Longitude must be within India territorial bounds (68.0° E to 97.0° E).');
+        return;
+      }
+    }
+
+    if (duplicateWarning) {
+      setError(duplicateWarning);
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -175,7 +270,8 @@ export const ManualSampleEntry: React.FC = () => {
         location_name: locationName || 'Regional Catchment',
         latitude: latitude ? parseFloat(latitude) : undefined,
         longitude: longitude ? parseFloat(longitude) : undefined,
-        collection_date: collectionDate ? new Date(collectionDate).toISOString() : new Date().toISOString(),
+        timezone: timezone || 'Asia/Kolkata',
+        collection_date: collectionDate || undefined,
         notes: notes || undefined,
         parameters: {
           ph: phNum,
@@ -213,26 +309,56 @@ export const ManualSampleEntry: React.FC = () => {
 
       {/* Quick Test Scenarios Bar */}
       <div className="bg-gradient-to-r from-teal-500/10 via-cyan-500/10 to-blue-500/10 border border-teal-200/60 dark:border-teal-900/60 rounded-xl p-4 space-y-2.5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
           <div className="text-xs font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
             <TestTube className="h-4 w-4" /> Load Illustrative Test Scenarios (Prompt Section 6)
           </div>
-          <span className="text-[11px] text-slate-500">Click to populate fields</span>
+          <span className="text-[11px] text-teal-700 dark:text-teal-400 font-medium">
+            Click any scenario to load values + make new unique Sample ID (Auto-generated if empty)
+          </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-          {TEST_SCENARIOS.map((sc) => (
+          {TEST_SCENARIOS.map((sc, idx) => (
             <button
               key={sc.id}
               type="button"
               onClick={() => handleScenarioLoad(sc)}
-              className="p-2 text-left rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-teal-500 hover:shadow-sm transition-all"
+              className="p-2.5 text-left rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-teal-500 hover:shadow-md transition-all group cursor-pointer"
+              title={`Click to load ${sc.name} and make a new unique Sample ID`}
             >
-              <div className="font-bold text-xs text-teal-700 dark:text-teal-300">{sc.id}</div>
-              <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium truncate">{sc.name.split(':')[1]}</div>
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-teal-700 dark:text-teal-300">Scenario {idx + 1}</span>
+                <span className="text-[9px] px-1 py-0.5 rounded bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400 font-mono font-semibold">
+                  {sc.id}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-700 dark:text-slate-300 font-semibold truncate mt-1">
+                {sc.name.split(':')[1]?.trim() || sc.name}
+              </div>
+              <div className="text-[10px] text-teal-600 dark:text-teal-400 font-medium truncate mt-0.5 flex items-center gap-1">
+                <Sparkles className="h-2.5 w-2.5" />
+                <span>Makes New Sample ID</span>
+              </div>
             </button>
           ))}
         </div>
       </div>
+
+      {scenarioNotification && (
+        <div className="p-3 rounded-xl bg-teal-50/90 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-900 text-teal-800 dark:text-teal-200 text-xs flex items-center justify-between gap-2 shadow-sm animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
+            <span className="font-medium">{scenarioNotification}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setScenarioNotification(null)}
+            className="text-[10px] font-semibold text-teal-600 hover:text-teal-800 dark:text-teal-300"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
@@ -251,16 +377,40 @@ export const ManualSampleEntry: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Sample ID (Auto-generated if empty)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Sample ID (Auto-generated if empty)
+                </label>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const id = await refreshNextId();
+                    if (id) setSampleId(id);
+                  }}
+                  disabled={loadingNextId}
+                  className="text-[10px] text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 font-medium flex items-center gap-1 transition-colors"
+                  title="Generate next sequential unique Sample ID"
+                >
+                  <Sparkles className="h-2.5 w-2.5" />
+                  {loadingNextId ? 'Generating...' : 'New ID'}
+                </button>
+              </div>
               <input
                 type="text"
-                placeholder="e.g. WQ001"
+                placeholder={nextSuggestedId ? `Auto-generated e.g. ${nextSuggestedId}` : "Auto-generated if empty"}
                 value={sampleId}
                 onChange={(e) => setSampleId(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:ring-2 focus:ring-teal-500 outline-none"
               />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                {sampleId ? 'Custom or freshly generated ID' : `Auto-generated sequential ID upon save ${nextSuggestedId ? `(${nextSuggestedId})` : ''}`}
+              </span>
+              {duplicateWarning && (
+                <div className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold flex items-start gap-1 mt-1.5 bg-amber-50 dark:bg-amber-950/50 p-2 rounded-lg border border-amber-200 dark:border-amber-900/60">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />
+                  <span>{duplicateWarning}</span>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -290,36 +440,55 @@ export const ManualSampleEntry: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Latitude (decimal degrees)
+                Latitude (decimal degrees, India)
               </label>
               <input
                 type="number"
                 step="any"
-                placeholder="37.7749"
+                placeholder="12.9784"
                 value={latitude}
                 onChange={(e) => setLatitude(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:ring-2 focus:ring-teal-500 outline-none"
               />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">India range: 8.0° N to 37.0° N</span>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Longitude (decimal degrees)
+                Longitude (decimal degrees, India)
               </label>
               <input
                 type="number"
                 step="any"
-                placeholder="-122.4194"
+                placeholder="77.6200"
                 value={longitude}
                 onChange={(e) => setLongitude(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:ring-2 focus:ring-teal-500 outline-none"
               />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">India range: 68.0° E to 97.0° E</span>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Collection Date & Time
+                Sampling Timezone
+              </label>
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:ring-2 focus:ring-teal-500 outline-none"
+              >
+                <option value="Asia/Kolkata">Asia/Kolkata (IST, UTC+5:30)</option>
+                <option value="UTC">UTC (Coordinated Universal Time)</option>
+                <option value="America/New_York">America/New_York (EST/EDT)</option>
+                <option value="Europe/London">Europe/London (GMT/BST)</option>
+                <option value="Asia/Dubai">Asia/Dubai (GST, UTC+4:00)</option>
+                <option value="Asia/Singapore">Asia/Singapore (SGT, UTC+8:00)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Collection Date & Time (Local)
               </label>
               <input
                 type="datetime-local"

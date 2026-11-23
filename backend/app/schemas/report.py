@@ -3,8 +3,9 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 class ReportGenerateRequest(BaseModel):
-    report_type: str  # "sample_pdf", "summary_pdf", "samples_excel"
+    report_type: str  # "sample_pdf", "sample_excel", "summary_pdf", "samples_excel"
     sample_id: Optional[int] = None
+    analysis_id: Optional[int] = None
     title: Optional[str] = None
     location_filter: Optional[str] = None
     start_date: Optional[datetime] = None
